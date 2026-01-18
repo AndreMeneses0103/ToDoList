@@ -15,3 +15,8 @@ class NewTask(BaseModel):
     
 class UpdateTask(BaseModel):
     id: int
+    
+
+class LoginSchema(BaseModel):
+    email: str
+    password: str

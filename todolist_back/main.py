@@ -1,6 +1,6 @@
 from typing import Union
 from typing import List
-from schemas import Task, NewTask, UpdateTask
+from schemas import Task, NewTask, UpdateTask, LoginSchema
 from fastapi import FastAPI, Query, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from database import get_db_connection
@@ -19,6 +19,27 @@ app.add_middleware(
 @app.get("/")
 def read_root():
     return {"Hello": "World"}
+
+@app.post("/login", status_code=200)
+def login_user(credentials: LoginSchema):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute(
+        "SELECT id FROM users WHERE email = %s AND password = %s;",
+        (credentials.email, credentials.password)
+    )
+    
+    user = cursor.fetchone()
+    cursor.close()
+    conn.close()
+    
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+    
+    return {"user_id": user[0]}
+    
+    
 
 @app.get("/tasks", response_model=List[Task])
 def get_tasks(id: int | None = Query(None, description="User ID to get tasks")):
@@ -110,7 +131,7 @@ def get_completed_tasks(id: int | None = Query(None, description="User ID to get
     conn.close()
     return tasks
 
-@app.post("/new-task", response_model=NewTask, status_code=201)
+@app.post("/new-task", response_model=Task, status_code=201)
 def post_new_task(task: NewTask):
     conn = get_db_connection()
     cursor = conn.cursor()
