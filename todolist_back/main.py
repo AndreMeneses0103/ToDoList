@@ -1,9 +1,11 @@
+from datetime import timedelta
 from typing import Union
 from typing import List
 from schemas import Task, NewTask, UpdateTask, LoginSchema
-from fastapi import FastAPI, Query, HTTPException
+from fastapi import FastAPI, Query, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 from database import get_db_connection
+from tokens import create_access_token, create_refresh_token
 
 app = FastAPI(title="ToDoList API", version="1.0.0")
 
@@ -21,7 +23,7 @@ def read_root():
     return {"Hello": "World"}
 
 @app.post("/login", status_code=200)
-def login_user(credentials: LoginSchema):
+def login_user(credentials: LoginSchema, response: Response):
     conn = get_db_connection()
     cursor = conn.cursor()
     
@@ -31,13 +33,30 @@ def login_user(credentials: LoginSchema):
     )
     
     user = cursor.fetchone()
+    
     cursor.close()
     conn.close()
     
     if not user:
         raise HTTPException(status_code=401, detail="Invalid email or password")
     
-    return {"user_id": user[0]}
+    access_token = create_access_token(data={"sub": user[0]}, expires_delta=timedelta(minutes=30))
+    refresh_token = create_refresh_token(data={"sub": user[0]}, expires_delta=timedelta(days=7))
+    
+    response.set_cookie(
+        key="refresh_token",
+        value=refresh_token,
+        httponly=True,
+        secure=True,
+        samesite="strict"
+    )
+    
+    
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "user_id": user[0]
+        }
     
     
 
