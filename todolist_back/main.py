@@ -2,10 +2,10 @@ from datetime import timedelta
 from typing import Union
 from typing import List
 from schemas import Task, NewTask, UpdateTask, LoginSchema
-from fastapi import FastAPI, Query, HTTPException, Response
+from fastapi import Depends, FastAPI, Query, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 from database import get_db_connection
-from tokens import create_access_token, create_refresh_token
+from tokens import create_access_token, create_refresh_token, get_current_user_id
 
 app = FastAPI(title="ToDoList API", version="1.0.0")
 
@@ -40,8 +40,8 @@ def login_user(credentials: LoginSchema, response: Response):
     if not user:
         raise HTTPException(status_code=401, detail="Invalid email or password")
     
-    access_token = create_access_token(data={"sub": user[0]}, expires_delta=timedelta(minutes=30))
-    refresh_token = create_refresh_token(data={"sub": user[0]}, expires_delta=timedelta(days=7))
+    access_token = create_access_token(data={"sub": str(user[0])}, expires_delta=timedelta(minutes=30))
+    refresh_token = create_refresh_token(data={"sub": str(user[0])}, expires_delta=timedelta(days=7))
     
     response.set_cookie(
         key="refresh_token",
@@ -54,14 +54,13 @@ def login_user(credentials: LoginSchema, response: Response):
     
     return {
         "access_token": access_token,
-        "token_type": "bearer",
-        "user_id": user[0]
+        "token_type": "bearer"
         }
     
     
 
 @app.get("/tasks", response_model=List[Task])
-def get_tasks(id: int | None = Query(None, description="User ID to get tasks")):
+def get_tasks(id: int = Depends(get_current_user_id)):
     conn = get_db_connection()
     cursor = conn.cursor()
     
