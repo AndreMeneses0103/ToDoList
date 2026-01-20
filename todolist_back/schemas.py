@@ -11,7 +11,6 @@ class Task(BaseModel):
     
 class NewTask(BaseModel):
     title: str
-    user_id: int
     
 class UpdateTask(BaseModel):
     id: int

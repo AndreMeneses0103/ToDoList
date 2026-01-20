@@ -5,7 +5,7 @@ from schemas import Task, NewTask, UpdateTask, LoginSchema
 from fastapi import Depends, FastAPI, Query, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 from database import get_db_connection
-from tokens import create_access_token, create_refresh_token, get_current_user_id
+from tokens import create_access_token, create_refresh_token, get_current_user
 
 app = FastAPI(title="ToDoList API", version="1.0.0")
 
@@ -60,9 +60,11 @@ def login_user(credentials: LoginSchema, response: Response):
     
 
 @app.get("/tasks", response_model=List[Task])
-def get_tasks(id: int = Depends(get_current_user_id)):
+def get_tasks(user = Depends(get_current_user)):
     conn = get_db_connection()
     cursor = conn.cursor()
+    
+    id = user.get("sub")
     
     if id:
         cursor.execute(
@@ -90,9 +92,11 @@ def get_tasks(id: int = Depends(get_current_user_id)):
     return tasks
 
 @app.get("/to-do-tasks", response_model=List[Task])
-def get_todo_tasks(id: int | None = Query(None, description="User ID to get to do tasks")):
+def get_todo_tasks(user = Depends(get_current_user)):
     conn = get_db_connection()
     cursor = conn.cursor()
+    
+    id = user.get("sub")
     
     if id:
         cursor.execute(
@@ -120,9 +124,11 @@ def get_todo_tasks(id: int | None = Query(None, description="User ID to get to d
     return tasks
 
 @app.get("/completed-tasks", response_model=List[Task])
-def get_completed_tasks(id: int | None = Query(None, description="User ID to get completed tasks")):
+def get_completed_tasks(id: int = Depends(get_current_user)):
     conn = get_db_connection()
     cursor = conn.cursor()
+    
+    id = id.get("sub")
     
     if id:
         cursor.execute(
@@ -150,13 +156,16 @@ def get_completed_tasks(id: int | None = Query(None, description="User ID to get
     return tasks
 
 @app.post("/new-task", response_model=Task, status_code=201)
-def post_new_task(task: NewTask):
+def post_new_task(task: NewTask, user = Depends(get_current_user)):
+    
+    user_id = int(user.get("sub"))
+    
     conn = get_db_connection()
     cursor = conn.cursor()
     
     cursor.execute(
         "INSERT INTO tasks (user_id, title) VALUES (%s, %s) RETURNING id, completed, created_at;",
-        (task.user_id, task.title)
+        (user_id, task.title)
     )
     
     row = cursor.fetchone()
@@ -165,17 +174,18 @@ def post_new_task(task: NewTask):
     cursor.close()
     conn.close()
     
-    print(row)
     return {
         "id": row[0],
-        "user_id": task.user_id,
+        "user_id": user_id,
         "title": task.title,
         "completed": row[1],
         "created_at": row[2],
     }
     
 @app.put("/update-task/{task_id}", response_model=Task)
-def complete_task(task_id: int):
+def complete_task(task_id: int, user = Depends(get_current_user)):
+    
+    user_id = int(user.get("sub"))
     conn = get_db_connection()
     cursor = conn.cursor()
     
@@ -184,10 +194,10 @@ def complete_task(task_id: int):
         UPDATE tasks
         SET completed = NOT completed,
             updated_at = NOW()
-        WHERE id = %s
-        RETURNING user_id, title, completed, created_at;
+        WHERE id = %s AND user_id = %s
+        RETURNING title, completed, created_at;
         """,
-        (task_id,)
+        (task_id, user_id)
     )
     
     row = cursor.fetchone()
@@ -201,20 +211,23 @@ def complete_task(task_id: int):
 
     return {
         "id": task_id,
-        "user_id": row[0],
+        "user_id": user_id,
         "title": row[1],
         "completed": row[2],
         "created_at": row[3],
     }
     
 @app.delete("/delete-task/{task_id}", status_code=204)
-def delete_task(task_id: int):
+def delete_task(task_id: int, user = Depends(get_current_user)):
+    
+    user_id = int(user.get("sub"))
+    
     conn = get_db_connection()
     cursor = conn.cursor()
     
     cursor.execute(
-        "DELETE FROM tasks WHERE id = %s RETURNING id;",
-        (task_id,)
+        "DELETE FROM tasks WHERE id = %s AND user_id = %s RETURNING id;",
+        (task_id, user_id)
     )
     deleted = cursor.fetchone()
     conn.commit()
